@@ -4,8 +4,8 @@ import { Send, Users, Circle, Smile, MessageSquare, Globe, X, Trash2, Zap, Setti
 // --- FIREBASE IMPORTS ---
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, collection, query, orderBy, limit, addDoc, onSnapshot, serverTimestamp, setDoc, doc, deleteDoc } from 'firebase/firestore';
-import { setLogLevel } from 'firebase/firestore'; 
+import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp } from 'firebase/firestore';
+// ... other imports (useState, useEffect, etc.)
 // setLogLevel('debug'); // Uncomment this to see detailed Firebase logs in console
 
 
