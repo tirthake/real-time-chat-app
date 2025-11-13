@@ -2,11 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Send, Users, Circle, Smile, MessageSquare, Globe, X, Trash2, Zap, Settings, StickyNote, Clock } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
-import { initializeApp } from 'firebase/app/compat'; // ADDED /compat
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth/compat'; // ADDED /compat
-import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp } from 'firebase/firestore'; 
-// ... other imports (useState, useEffect, etc.)
-// setLogLevel('debug'); // Uncomment this to see detailed Firebase logs in console
+import { initializeApp } from 'firebase/app/compat'; // Note the /compat added here
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth/compat'; // Note the /compat added here
+import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp } from 'firebase/firestore';
 
 export default function App() {
   // --- FIREBASE STATE ---
