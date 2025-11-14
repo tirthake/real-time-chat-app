@@ -1,14 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 // FIX: Using full CDN imports to resolve "Failed to resolve module specifier" errors on Vercel/browser.
+// NOTE: lucide-react imports are removed here to fix "Cannot import a non-module file from a module file"
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { Send, LogOut, Loader, User, Zap, MessageCircle } from 'lucide-react'; 
 
 // --- Global Context Variables (Provided by Canvas) ---
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+// Directly reference the components globally (they will be available in this environment)
+// NOTE: This assumes the lucide-react components are loaded globally by the runtime.
+const { Send, LogOut, Loader, User, Zap, MessageCircle } = lucide;
 
 // --- Helper function for Firebase Initialization ---
 let app, db, auth;
@@ -149,9 +153,6 @@ const App = () => {
   // 5. User Sign-Out
   const handleSignOut = () => {
     if (auth) {
-      // NOTE: For this environment, signing out just resets the state, 
-      // but the platform will immediately sign the user back in with the token.
-      // This button acts more as a placeholder for a real-world app.
       auth.signOut();
       setUser(null);
     }

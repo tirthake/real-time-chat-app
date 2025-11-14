@@ -6,16 +6,17 @@ export default defineConfig({
   plugins: [react()],
   build: {
     rollupOptions: {
-      // FIX: Explicitly externalize these imports to prevent Vercel/Rollup build failures
-      // that happen when using the /compat paths in App.jsx.
+      // FIX: Mark 'lucide-react' as external to avoid module conflicts 
+      // when mixing with CDN imports in the runtime environment.
       external: [
-        'firebase/app/compat',
-        'firebase/auth/compat',
-        'firebase/app',
-        'firebase/auth',
-        'firebase/firestore',
         'lucide-react'
-      ],
+      ]
     },
+    // Ensure all modules are outputted in a way that works with Vercel/dynamic imports
+    target: 'esnext'
   },
+  // Set host to '0.0.0.0' for development environment compatibility
+  server: {
+    host: '0.0.0.0'
+  }
 });
