@@ -1,18 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-// FIX: Using full CDN imports to resolve "Failed to resolve module specifier" errors on Vercel/browser.
-// NOTE: lucide-react imports are removed here to fix "Cannot import a non-module file from a module file"
+// Using full CDN imports to resolve "Failed to resolve module specifier" errors on Vercel/browser.
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+// NOTE: lucide-react imports are removed and replaced with standard Font Awesome (FA) icons.
 
 // --- Global Context Variables (Provided by Canvas) ---
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-// Directly reference the components globally (they will be available in this environment)
-// NOTE: This assumes the lucide-react components are loaded globally by the runtime.
-const { Send, LogOut, Loader, User, Zap, MessageCircle } = lucide;
 
 // --- Helper function for Firebase Initialization ---
 let app, db, auth;
@@ -163,7 +160,7 @@ const App = () => {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <Loader className="animate-spin text-indigo-500 h-8 w-8" />
+        <i className="fa-solid fa-spinner fa-spin text-indigo-500 h-8 w-8 text-2xl"></i>
         <p className="ml-3 text-lg font-medium text-gray-700">Connecting to Firebase...</p>
       </div>
     );
@@ -177,12 +174,12 @@ const App = () => {
         {/* Header */}
         <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-indigo-600 text-white shadow-lg">
           <div className="flex items-center">
-            <MessageCircle className="w-6 h-6 mr-2" />
+            <i className="fa-solid fa-comments w-6 h-6 mr-2"></i>
             <h1 className="text-xl font-extrabold tracking-tight">Public Real-Time Chat</h1>
           </div>
           <div className="flex items-center space-x-3">
             <div className="text-sm font-medium flex items-center bg-indigo-700 px-3 py-1 rounded-full">
-              <User className="w-4 h-4 mr-1"/>
+              <i className="fa-solid fa-user w-4 h-4 mr-1"></i>
               {user ? `UID: ${user.uid.substring(0, 8)}...` : 'Not Signed In'}
             </div>
             <button
@@ -190,7 +187,7 @@ const App = () => {
               className="p-2 rounded-full hover:bg-indigo-700 transition duration-150"
               aria-label="Sign Out"
             >
-              <LogOut className="w-5 h-5" />
+              <i className="fa-solid fa-right-from-bracket w-5 h-5"></i>
             </button>
           </div>
         </div>
@@ -199,7 +196,7 @@ const App = () => {
         <div className="flex flex-col flex-grow h-0 p-4 overflow-y-auto space-y-4">
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-gray-500 p-8">
-              <Zap className="w-10 h-10 mb-3 text-indigo-400" />
+              <i className="fa-solid fa-bolt w-10 h-10 mb-3 text-indigo-400 text-3xl"></i>
               <p className="text-lg font-semibold">Start the conversation!</p>
               <p className="text-sm text-center mt-1">
                 Your messages will appear here instantly.
@@ -251,7 +248,7 @@ const App = () => {
               className="flex items-center justify-center px-4 py-3 bg-indigo-600 text-white rounded-lg shadow-lg hover:bg-indigo-700 transition duration-150 disabled:opacity-50"
               disabled={!newMessage.trim() || !user}
             >
-              <Send className="w-5 h-5 mr-1" />
+              <i className="fa-solid fa-paper-plane w-5 h-5 mr-1"></i>
               Send
             </button>
           </form>
