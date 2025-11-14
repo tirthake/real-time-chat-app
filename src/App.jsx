@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-// FIX: Revert to standard modular imports. The /compat paths caused an ESBuild error in this environment.
-import { initializeApp } from 'firebase/app'; 
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
-import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, setLogLevel } from 'firebase/firestore';
+// FIX: Using full CDN imports to resolve "Failed to resolve module specifier" errors on Vercel/browser.
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { Send, LogOut, Loader, User, Zap, MessageCircle } from 'lucide-react'; 
 
 // --- Global Context Variables (Provided by Canvas) ---
@@ -39,25 +39,37 @@ const App = () => {
 
   // 1. Firebase Initialization and Authentication
   useEffect(() => {
-    if (!firebaseConfig || !initialAuthToken) {
-      console.error("Cannot proceed without Firebase Config and Auth Token.");
+    // Check for essential config
+    if (!firebaseConfig) {
+      console.error("Firebase configuration is missing.");
       setIsLoading(false);
       return;
     }
     
+    // Initialize Firebase if not already done
     if (!app) {
       initializeFirebase();
     }
 
+    if (!auth) {
+        console.error("Firebase Auth not initialized.");
+        setIsLoading(false);
+        return;
+    }
+    
+    // Authentication State Listener
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
+        // User signed in (via initial token or anonymously)
         setUser(currentUser);
         setIsLoading(false);
       } else {
+        // No user, attempt initial sign-in
         try {
           if (initialAuthToken) {
             await signInWithCustomToken(auth, initialAuthToken);
           } else {
+            // Fallback to anonymous sign-in if token is unavailable
             await signInAnonymously(auth);
           }
         } catch (error) {
@@ -69,18 +81,19 @@ const App = () => {
     });
 
     return () => unsubscribeAuth();
-  }, []);
+  }, []); // Run only once on mount
 
   // 2. Real-time Data Fetching (Firestore Snapshot)
   useEffect(() => {
+    // Wait until Firestore and user are ready
     if (!db || !user) {
       return;
     }
 
-    // FIX: Restoring the required 5-segment public data path (C/D/C/D/C) to fix the "Invalid collection reference" error.
-    // Path: /artifacts/{appId}/public/data/messages
+    // Path: /artifacts/{appId}/public/data/messages (5 segments: C/D/C/D/C)
     const messagesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'messages');
     
+    // Create a query without orderBy to avoid index creation issues in the environment
     const q = query(messagesCollectionRef);
 
     const unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
@@ -90,10 +103,12 @@ const App = () => {
         fetchedMessages.push({
           id: doc.id,
           ...data,
+          // Convert Firestore Timestamp to Date object if it exists
           createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
         });
       });
 
+      // Sort in memory to order by timestamp since orderBy() is avoided in the query
       fetchedMessages.sort((a, b) => a.createdAt - b.createdAt);
       setMessages(fetchedMessages);
     }, (error) => {
@@ -101,7 +116,7 @@ const App = () => {
     });
 
     return () => unsubscribeSnapshot();
-  }, [user]);
+  }, [user]); // Re-run when user object changes
 
   // 3. Scroll to Bottom of Messages
   useEffect(() => {
@@ -113,7 +128,7 @@ const App = () => {
     e.preventDefault();
     if (!newMessage.trim() || !user || !db) return;
 
-    // FIX: Using the correct 5-segment public collection path
+    // Correct 5-segment public collection path
     const messagesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'messages');
 
     try {
@@ -125,6 +140,7 @@ const App = () => {
         appId: appId,
       });
       setNewMessage('');
+      inputRef.current?.focus();
     } catch (error) {
       console.error("Error sending message:", error);
     }
@@ -133,6 +149,9 @@ const App = () => {
   // 5. User Sign-Out
   const handleSignOut = () => {
     if (auth) {
+      // NOTE: For this environment, signing out just resets the state, 
+      // but the platform will immediately sign the user back in with the token.
+      // This button acts more as a placeholder for a real-world app.
       auth.signOut();
       setUser(null);
     }
@@ -140,7 +159,7 @@ const App = () => {
 
   // 6. UI Rendering Logic
   
-  if (isLoading || !firebaseConfig) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <Loader className="animate-spin text-indigo-500 h-8 w-8" />
@@ -186,7 +205,7 @@ const App = () => {
               </p>
             </div>
           ) : (
-            messages.map((msg, index) => {
+            messages.map((msg) => {
               const isUser = msg.userId === user?.uid;
               const time = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 

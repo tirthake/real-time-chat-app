@@ -6,8 +6,9 @@ export default defineConfig({
   plugins: [react()],
   build: {
     rollupOptions: {
+      // FIX: Explicitly externalize these imports to prevent Vercel/Rollup build failures
+      // that happen when using the /compat paths in App.jsx.
       external: [
-        // Include the new /compat paths to prevent Rollup errors
         'firebase/app/compat',
         'firebase/auth/compat',
         'firebase/app',
