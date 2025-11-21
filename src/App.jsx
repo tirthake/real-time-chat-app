@@ -63,7 +63,7 @@ const App = () => {
   useEffect(() => {
     if (!db || !user) return;
 
-    // Use the correct path that matches your Security Rules!
+    // Correct Path: 5 segments
     const messagesCol = collection(db, 'artifacts', appId, 'public', 'data', 'messages');
     const q = query(messagesCol);
 
@@ -94,6 +94,7 @@ const App = () => {
     if (!newMessage.trim() || !db || !user) return;
 
     try {
+      // FIX: Ensure this path matches the listener path EXACTLY (5 segments)
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'messages'), {
         text: newMessage.trim(),
         createdAt: serverTimestamp(),
