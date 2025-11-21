@@ -1,260 +1,328 @@
 import React, { useState, useEffect, useRef } from 'react';
-// Using full CDN imports to resolve "Failed to resolve module specifier" errors on Vercel/browser.
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { initializeApp } from 'firebase/app';
+import {
+  getAuth,
+  signInAnonymously,
+  onAuthStateChanged,
+  signInWithCustomToken,
+} from 'firebase/auth';
+import {
+  getFirestore,
+  collection,
+  query,
+  onSnapshot,
+  orderBy,
+  addDoc,
+  Timestamp,
+  doc,
+  deleteDoc,
+  setLogLevel,
+} from 'firebase/firestore';
+import { Send, Trash2, LogOut } from 'lucide-react';
 
-// NOTE: lucide-react imports are removed and replaced with standard Font Awesome (FA) icons.
-
-// --- Global Context Variables (Provided by Canvas) ---
+// Environment variables provided by the canvas environment
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+const firebaseConfig = JSON.parse(
+  typeof __firebase_config !== 'undefined'
+    ? __firebase_config
+    : '{}'
+);
+const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : '';
 
-// --- Helper function for Firebase Initialization ---
-let app, db, auth;
 
-function initializeFirebase() {
-  if (!firebaseConfig) {
-    console.error("Firebase configuration is missing.");
-    return;
+// --- CONFIGURATION START ---
+// PASTE YOUR REAL FIREBASE CONFIGURATION HERE
+// NOTE: I've included the project-specific values, but you MUST replace the three placeholders (API Key, Sender ID, App ID)
+const config = {
+  apiKey: "AIzaSyAJ7og8KerHxJ3RLW2NIL9Tt5cCY9VSGIg", // <-- REPLACE THIS WITH YOUR ACTUAL API KEY STRING
+  authDomain: "real-time-chat-r174vhc55.firebaseapp.com",
+  projectId: "real-time-chat-r174vhc55",
+  storageBucket: "real-time-chat-r174vhc55.appspot.com",
+  messagingSenderId: "516075270422", // <-- REPLACE THIS
+  appId: "1:516075270422:web:d7a89c722e6e227f1c6037" // <-- REPLACE THIS
+};
+
+// Use environment variables if they exist, otherwise use the provided configuration
+const finalConfig = Object.keys(firebaseConfig).length > 0 ? firebaseConfig : config;
+
+// --- CONFIGURATION END ---
+
+
+const generateUserColor = (userId) => {
+  // Simple deterministic color generation based on user ID hash
+  let hash = 0;
+  for (let i = 0; i < userId.length; i++) {
+    hash = userId.charCodeAt(i) + ((hash << 5) - hash);
   }
-  try {
-    app = initializeApp(firebaseConfig);
-    db = getFirestore(app);
-    auth = getAuth(app);
-    setLogLevel('debug');
-  } catch (error) {
-    console.error("Error initializing Firebase:", error);
+  let color = '#';
+  for (let i = 0; i < 3; i++) {
+    const value = (hash >> (i * 8)) & 0xff;
+    color += ('00' + value.toString(16)).substr(-2);
   }
-}
+  return color;
+};
 
-// --- Main Chat Component ---
+const ChatBubble = ({ message, currentUserId, onDelete }) => {
+  const isMine = message.userId === currentUserId;
+  const color = generateUserColor(message.userId);
+
+  return (
+    <div
+      className={`flex mb-4 ${isMine ? 'justify-end' : 'justify-start'}`}
+    >
+      <div
+        className={`max-w-xs lg:max-w-md p-3 rounded-xl shadow-lg relative ${
+          isMine
+            ? 'bg-blue-600 text-white rounded-br-none'
+            : 'bg-white text-gray-800 rounded-tl-none'
+        }`}
+        style={{
+          border: isMine ? 'none' : `2px solid ${color}`,
+        }}
+      >
+        <div className="font-semibold text-xs mb-1 opacity-70">
+          {isMine ? 'You' : `User: ${message.userId.substring(0, 8)}...`}
+        </div>
+        <p className="text-sm break-words whitespace-pre-wrap">{message.text}</p>
+        <div className="text-xs mt-1 text-right opacity-50">
+          {message.timestamp?.toDate().toLocaleTimeString()}
+        </div>
+        {isMine && (
+          <button
+            onClick={() => onDelete(message.id)}
+            className="absolute top-0 right-0 p-1 text-white opacity-70 hover:opacity-100 transition duration-150"
+            title="Delete Message"
+          >
+            <Trash2 size={14} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const App = () => {
+  const [db, setDb] = useState(null);
+  const [auth, setAuth] = useState(null);
+  const [userId, setUserId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
-  const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const messagesEndRef = useRef(null);
-  const inputRef = useRef(null);
 
-  // 1. Firebase Initialization and Authentication
+  // Scroll to the latest message
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   useEffect(() => {
-    // Check for essential config
-    if (!firebaseConfig) {
-      console.error("Firebase configuration is missing.");
+    // Scroll whenever messages are loaded or updated
+    scrollToBottom();
+  }, [messages]);
+
+
+  // 1. Initialize Firebase and Handle Authentication
+  useEffect(() => {
+    if (Object.keys(finalConfig).length === 0) {
+      console.error("Firebase config is missing. Please provide the configuration.");
       setIsLoading(false);
       return;
     }
-    
-    // Initialize Firebase if not already done
-    if (!app) {
-      initializeFirebase();
-    }
 
-    if (!auth) {
-        console.error("Firebase Auth not initialized.");
-        setIsLoading(false);
-        return;
-    }
-    
-    // Authentication State Listener
-    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        // User signed in (via initial token or anonymously)
-        setUser(currentUser);
-        setIsLoading(false);
-      } else {
-        // No user, attempt initial sign-in
+    setLogLevel('debug');
+    try {
+      const app = initializeApp(finalConfig);
+      const firestore = getFirestore(app);
+      const firebaseAuth = getAuth(app);
+
+      setDb(firestore);
+      setAuth(firebaseAuth);
+
+      const handleAuth = async () => {
         try {
           if (initialAuthToken) {
-            await signInWithCustomToken(auth, initialAuthToken);
+            await signInWithCustomToken(firebaseAuth, initialAuthToken);
           } else {
-            // Fallback to anonymous sign-in if token is unavailable
-            await signInAnonymously(auth);
+            await signInAnonymously(firebaseAuth);
           }
         } catch (error) {
-          console.error("Authentication failed:", error);
-          setUser(null);
-          setIsLoading(false);
+          console.error('Firebase Auth Error:', error);
+          // If custom token fails, try anonymous sign-in as a fallback
+          try {
+            await signInAnonymously(firebaseAuth);
+          } catch (anonError) {
+            console.error('Anonymous sign-in failed:', anonError);
+          }
         }
-      }
-    });
+      };
+      
+      handleAuth();
 
-    return () => unsubscribeAuth();
-  }, []); // Run only once on mount
+      // Listen for auth state changes
+      const unsubscribeAuth = onAuthStateChanged(firebaseAuth, (user) => {
+        if (user) {
+          setUserId(user.uid);
+          console.log('User signed in with UID:', user.uid);
+        } else {
+          setUserId(null);
+          console.log('User signed out.');
+        }
+        setIsLoading(false);
+      });
 
-  // 2. Real-time Data Fetching (Firestore Snapshot)
-  useEffect(() => {
-    // Wait until Firestore and user are ready
-    if (!db || !user) {
-      return;
+      return () => unsubscribeAuth();
+    } catch (error) {
+      console.error("Failed to initialize Firebase:", error);
+      setIsLoading(false);
     }
+  }, [initialAuthToken]); // Only run once on mount
 
-    // Path: /artifacts/{appId}/public/data/messages (5 segments: C/D/C/D/C)
+  // 2. Fetch and Listen to Messages
+  useEffect(() => {
+    if (!db || !userId) return; // Wait for Firebase to be initialized and user authenticated
+
+    // Collection path: /artifacts/{appId}/public/data/messages
     const messagesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'messages');
     
-    // Create a query without orderBy to avoid index creation issues in the environment
-    const q = query(messagesCollectionRef);
+    // Create a query to order messages by timestamp
+    const q = query(messagesCollectionRef, orderBy('timestamp', 'asc'));
 
-    const unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
-      const fetchedMessages = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        fetchedMessages.push({
-          id: doc.id,
-          ...data,
-          // Convert Firestore Timestamp to Date object if it exists
-          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
-        });
-      });
+    // Set up real-time listener
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const messagesData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
 
-      // Sort in memory to order by timestamp since orderBy() is avoided in the query
-      fetchedMessages.sort((a, b) => a.createdAt - b.createdAt);
-      setMessages(fetchedMessages);
+      // In-memory sort just in case
+      messagesData.sort((a, b) => (a.timestamp?.toMillis() || 0) - (b.timestamp?.toMillis() || 0));
+
+      setMessages(messagesData);
+      console.log('Messages updated.');
     }, (error) => {
-      console.error("Error fetching messages:", error);
+      console.error('Firestore Snapshot Error:', error);
     });
 
-    return () => unsubscribeSnapshot();
-  }, [user]); // Re-run when user object changes
+    // Clean up the listener on component unmount
+    return () => unsubscribe();
+  }, [db, userId, appId]);
 
-  // 3. Scroll to Bottom of Messages
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  // 4. Send Message Handler
+  // 3. Send Message Function
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!newMessage.trim() || !user || !db) return;
-
-    // Correct 5-segment public collection path
-    const messagesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'messages');
+    if (!newMessage.trim() || !db || !userId) return;
 
     try {
+      const messagesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'messages');
       await addDoc(messagesCollectionRef, {
         text: newMessage.trim(),
-        createdAt: serverTimestamp(), 
-        userId: user.uid,
-        userName: `User-${user.uid.substring(0, 5)}`, 
-        appId: appId,
+        timestamp: Timestamp.now(),
+        userId: userId,
       });
       setNewMessage('');
-      inputRef.current?.focus();
     } catch (error) {
-      console.error("Error sending message:", error);
+      console.error('Error sending message:', error);
     }
   };
-  
-  // 5. User Sign-Out
+
+  // 4. Delete Message Function
+  const handleDeleteMessage = async (messageId) => {
+    if (!db || !userId) return;
+
+    const messageRef = doc(db, 'artifacts', appId, 'public', 'data', 'messages', messageId);
+    
+    try {
+      await deleteDoc(messageRef);
+    } catch (error) {
+      console.error('Error deleting message:', error);
+    }
+  };
+
+  // 5. Placeholder Sign Out Function (For demonstration)
   const handleSignOut = () => {
     if (auth) {
       auth.signOut();
-      setUser(null);
+      setUserId(null);
+      // Note: In a production app, you might want a full redirect or logout flow here
     }
   };
 
-  // 6. UI Rendering Logic
-  
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <i className="fa-solid fa-spinner fa-spin text-indigo-500 h-8 w-8 text-2xl"></i>
-        <p className="ml-3 text-lg font-medium text-gray-700">Connecting to Firebase...</p>
-      </div>
-    );
-  }
 
-  // --- Main Chat UI ---
   return (
-    <div className="flex flex-col h-screen antialiased text-gray-800 bg-gray-100 p-4">
-      <div className="flex flex-col flex-grow w-full max-w-4xl mx-auto bg-white rounded-xl shadow-2xl overflow-hidden">
-        
-        {/* Header */}
-        <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-indigo-600 text-white shadow-lg">
-          <div className="flex items-center">
-            <i className="fa-solid fa-comments w-6 h-6 mr-2"></i>
-            <h1 className="text-xl font-extrabold tracking-tight">Public Real-Time Chat</h1>
-          </div>
-          <div className="flex items-center space-x-3">
-            <div className="text-sm font-medium flex items-center bg-indigo-700 px-3 py-1 rounded-full">
-              <i className="fa-solid fa-user w-4 h-4 mr-1"></i>
-              {user ? `UID: ${user.uid.substring(0, 8)}...` : 'Not Signed In'}
-            </div>
+    <div className="flex flex-col h-screen antialiased bg-gray-100 font-sans p-4 sm:p-6 lg:p-8">
+      {/* Header/User Info */}
+      <header className="flex justify-between items-center p-3 mb-4 bg-white rounded-xl shadow-md sticky top-0 z-10">
+        <h1 className="text-2xl font-bold text-gray-800">Real-Time Chat</h1>
+        <div className="flex items-center space-x-3">
+          <span className="text-sm font-medium text-gray-600 truncate">
+            {isLoading ? 'Connecting...' : (userId ? `User: ${userId}` : 'Signed Out')}
+          </span>
+          {userId && (
             <button
               onClick={handleSignOut}
-              className="p-2 rounded-full hover:bg-indigo-700 transition duration-150"
-              aria-label="Sign Out"
+              className="p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition duration-200 shadow-lg"
+              title="Sign Out"
             >
-              <i className="fa-solid fa-right-from-bracket w-5 h-5"></i>
+              <LogOut size={18} />
             </button>
-          </div>
-        </div>
-
-        {/* Message Area */}
-        <div className="flex flex-col flex-grow h-0 p-4 overflow-y-auto space-y-4">
-          {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-gray-500 p-8">
-              <i className="fa-solid fa-bolt w-10 h-10 mb-3 text-indigo-400 text-3xl"></i>
-              <p className="text-lg font-semibold">Start the conversation!</p>
-              <p className="text-sm text-center mt-1">
-                Your messages will appear here instantly.
-              </p>
-            </div>
-          ) : (
-            messages.map((msg) => {
-              const isUser = msg.userId === user?.uid;
-              const time = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-              return (
-                <div key={msg.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`flex flex-col max-w-xs md:max-w-md ${isUser ? 'items-end' : 'items-start'}`}>
-                    <div className={`text-xs mb-1 ${isUser ? 'text-gray-500' : 'text-gray-600'}`}>
-                      {isUser ? 'You' : msg.userName}
-                    </div>
-                    <div className={`relative px-4 py-2 rounded-2xl shadow-md ${
-                      isUser 
-                        ? 'bg-indigo-500 text-white rounded-br-none' 
-                        : 'bg-gray-200 text-gray-800 rounded-tl-none'
-                    }`}>
-                      <p className="text-sm break-words whitespace-pre-wrap">{msg.text}</p>
-                      <span className={`block text-right text-[10px] opacity-70 mt-1 ${isUser ? 'text-indigo-100' : 'text-gray-500'}`}>
-                        {time}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })
           )}
-          <div ref={messagesEndRef} />
         </div>
+      </header>
 
-        {/* Input Area */}
-        <div className="p-4 border-t border-gray-200 bg-gray-50">
-          <form onSubmit={handleSendMessage} className="flex space-x-3">
-            <input
-              ref={inputRef}
-              type="text"
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              placeholder="Type your message..."
-              className="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 shadow-inner transition duration-150"
-              disabled={!user}
+      {/* Main Chat Area */}
+      <div className="flex-1 overflow-y-auto bg-white p-4 rounded-xl shadow-lg mb-4">
+        {isLoading ? (
+          <div className="flex justify-center items-center h-full text-gray-500">
+            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Loading Messages...
+          </div>
+        ) : !userId ? (
+            <div className="flex justify-center items-center h-full text-center text-red-500 font-medium">
+                Authentication Failed. Please check your Firebase configuration!
+            </div>
+        ) : messages.length === 0 ? (
+          <div className="flex justify-center items-center h-full text-gray-400">
+            Start the conversation! No messages yet.
+          </div>
+        ) : (
+          messages.map((message) => (
+            <ChatBubble
+              key={message.id}
+              message={message}
+              currentUserId={userId}
+              onDelete={handleDeleteMessage}
             />
-            <button
-              type="submit"
-              className="flex items-center justify-center px-4 py-3 bg-indigo-600 text-white rounded-lg shadow-lg hover:bg-indigo-700 transition duration-150 disabled:opacity-50"
-              disabled={!newMessage.trim() || !user}
-            >
-              <i className="fa-solid fa-paper-plane w-5 h-5 mr-1"></i>
-              Send
-            </button>
-          </form>
-        </div>
-
+          ))
+        )}
+        <div ref={messagesEndRef} />
       </div>
+
+      {/* Input Form */}
+      <form onSubmit={handleSendMessage} className="flex space-x-3 p-3 bg-white rounded-xl shadow-lg">
+        <input
+          type="text"
+          value={newMessage}
+          onChange={(e) => setNewMessage(e.target.value)}
+          placeholder={userId ? "Type your message here..." : "Connecting to chat service..."}
+          className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150 shadow-inner disabled:bg-gray-50 disabled:text-gray-400"
+          disabled={!userId || isLoading}
+        />
+        <button
+          type="submit"
+          className={`p-3 rounded-lg text-white font-semibold flex items-center justify-center transition duration-200 shadow-md ${
+            !newMessage.trim() || !userId || isLoading
+              ? 'bg-blue-300 cursor-not-allowed'
+              : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800'
+          }`}
+          disabled={!newMessage.trim() || !userId || isLoading}
+        >
+          <Send size={20} className="mr-2" />
+          Send
+        </button>
+      </form>
     </div>
   );
 };
