@@ -6,7 +6,7 @@ import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp, s
 import { Send, LogOut, Loader, User, Zap, MessageCircle } from 'lucide-react';
 
 // --- CONFIGURATION START ---
-// PASTE YOUR REAL FIREBASE CONFIGURATION HERE
+// THESE ARE YOUR REAL KEYS FROM THE SCREENSHOT
 const firebaseConfig = {
   apiKey: "AIzaSyAJ7og8KerHxJ3RLW2NIL9Tt5cCY9VSGIg",
   authDomain: "real-time-chat-r174vhc55.firebaseapp.com",
@@ -64,7 +64,6 @@ const App = () => {
     if (!db || !user) return;
 
     // Use the correct path that matches your Security Rules!
-    // Your rules allow: /artifacts/{appId}/public/data/messages
     const messagesCol = collection(db, 'artifacts', appId, 'public', 'data', 'messages');
     const q = query(messagesCol);
 
@@ -95,7 +94,6 @@ const App = () => {
     if (!newMessage.trim() || !db || !user) return;
 
     try {
-      // Use the same correct path
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'messages'), {
         text: newMessage.trim(),
         createdAt: serverTimestamp(),
